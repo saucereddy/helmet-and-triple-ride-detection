@@ -1,64 +1,77 @@
 import numpy as np
-import argparse
 import cv2 as cv
-import subprocess
-import time
-import os
 
-def detectObject(CNNnet, total_layer_names, image_height, image_width, image, name_colors, class_labels,indexno,  
+def detectObject(CNNnet, total_layer_names, image_height, image_width, image, name_colors, class_labels, indexno,  
             Boundingboxes=None, confidence_value=None, class_ids=None, ids=None, detect=True):
     
+    option = 0
+    counter = 0
     if detect:
-        blob_object = cv.dnn.blobFromImage(image,1/255.0,(416, 416),swapRB=True,crop=False)
+        blob_object = cv.dnn.blobFromImage(image, 1/255.0, (416, 416), swapRB=True, crop=False)
         CNNnet.setInput(blob_object)
         cnn_outs_layer = CNNnet.forward(total_layer_names)
         Boundingboxes, confidence_value, class_ids = listBoundingBoxes(cnn_outs_layer, image_height, image_width, 0.5)
         ids = cv.dnn.NMSBoxes(Boundingboxes, confidence_value, 0.5, 0.3)
+        
         if Boundingboxes is None or confidence_value is None or ids is None or class_ids is None:
-<<<<<<< HEAD
            print("[ERROR] unable to draw boxes.")
            return image, 0, 0
-=======
-           raise '[ERROR] unable to draw boxes.'
->>>>>>> 3542dd834f606db02714badc54f44add821a203a
-        image,option,counter = labelsBoundingBoxes(image, Boundingboxes, confidence_value, class_ids, ids, name_colors, class_labels,indexno)
+        
+        image, option, p_count, b_count = labelsBoundingBoxes(image, Boundingboxes, confidence_value, class_ids, ids, name_colors, class_labels, indexno)
+    else:
+        p_count, b_count = 0, 0
 
-    return image,option, counter
+    return image, option, p_count, b_count
 
 
-def labelsBoundingBoxes(image, Boundingbox, conf_thr, classID, ids, color_names, predicted_labels,indexno):
+def labelsBoundingBoxes(image, Boundingbox, conf_thr, classID, ids, color_names, predicted_labels, indexno):
     option = 0
-    count = 0
+    p_count = 0
+    b_count = 0
     if len(ids) > 0:
-        for i in ids.flatten():
-            # draw boxes
+        # Compatibility for different NMSBoxes return types
+        if isinstance(ids, np.ndarray):
+            ids_list = ids.flatten()
+        else:
+            ids_list = ids
+
+        for i in ids_list:
             xx, yy = Boundingbox[i][0], Boundingbox[i][1]
             width, height = Boundingbox[i][2], Boundingbox[i][3]
             
-            class_color = (0,255,0)#[int(color) for color in color_names[classID[i]]]
+            class_color = (0, 255, 0)
 
             cv.rectangle(image, (xx, yy), (xx+width, yy+height), class_color, 2)
-            print(classID[i])
+            
+            # Usually class 0 is person and class 1 is motorbike in YOLOv3 COCO or similar
             if classID[i] <= 1:
-                count = count + 1
-                text_label = "{}: {:4f}".format(predicted_labels[classID[i]], conf_thr[i])
-                #displayImage(image,indexno)
-                cv.putText(image, text_label, (xx, yy-5), cv.FONT_HERSHEY_SIMPLEX, 0.5, class_color, 2)
+                if classID[i] == 0: p_count += 1
+                if classID[i] == 1: b_count += 1
+                
+                try:
+                    label_name = predicted_labels[classID[i]]
+                except IndexError:
+                    label_name = "Object"
+                
+                text_label = "{}: {:.2f}".format(label_name, conf_thr[i])
+                (label_w, label_h), baseline = cv.getTextSize(text_label, cv.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+                cv.rectangle(image, (xx, yy - label_h - baseline), (xx + label_w, yy), class_color, -1)
+                cv.putText(image, text_label, (xx, yy - baseline), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
                 option = 1
 
-    return image,option, count
+    return image, option, p_count, b_count
 
 
-def listBoundingBoxes(image, image_height, image_width, threshold_conf):
+def listBoundingBoxes(outs, image_height, image_width, threshold_conf):
     box_array = []
     confidence_array = []
     class_ids_array = []
 
-    for img in image:
+    for img in outs:
         for obj_detection in img:
             detection_scores = obj_detection[5:]
             class_id = np.argmax(detection_scores)
-            confidence_value = detection_scores[class_id]
+            confidence_value = obj_detection[4] * detection_scores[class_id]
             if confidence_value > threshold_conf and class_id <= 1:
                 Boundbox = obj_detection[0:4] * np.array([image_width, image_height, image_width, image_height])
                 center_X, center_Y, box_width, box_height = Boundbox.astype('int')
@@ -72,15 +85,6 @@ def listBoundingBoxes(image, image_height, image_width, threshold_conf):
 
     return box_array, confidence_array, class_ids_array
 
-def displayImage(image,index):
-<<<<<<< HEAD
+def displayImage(image, index):
     cv.imshow("Final Image", image)
     cv.waitKey(1)
-=======
-    #cv.imwrite('bikes/'+str(index)+'.jpg',image)
-    #index = index + 1
-    cv.imshow("Final Image", image)
-    cv.waitKey(0)
->>>>>>> 3542dd834f606db02714badc54f44add821a203a
-
-
