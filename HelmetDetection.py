@@ -38,25 +38,41 @@ cnn_model = None
 
 def load_plate_model():
     global plate_detecter, labels_value
+
     if plate_detecter is None:
         print("Loading Number Plate CNN model...")
-        from tf_keras.models import model_from_json
-        if not os.path.exists('Models/model.json'):
-            print("Error: Models/model.json not found")
-            return
-        with open('Models/model.json', "r") as json_file:
-            loaded_model_json = json_file.read()
-            plate_detecter = model_from_json(loaded_model_json)
-        plate_detecter.load_weights("Models/model_weights.h5")
-        print("Number Plate CNN model loaded.")
-    
+
+        try:
+            from tensorflow.keras.models import Sequential
+            from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+
+            # ✅ Rebuild model manually (based on your JSON structure)
+            plate_detecter = Sequential([
+                Conv2D(32, (3,3), activation='relu', input_shape=(64,64,3)),
+                MaxPooling2D(2,2),
+                Conv2D(32, (3,3), activation='relu'),
+                MaxPooling2D(2,2),
+                Flatten(),
+                Dense(128, activation='relu'),
+                Dense(20, activation='softmax')
+            ])
+
+            # ✅ Load weights
+            plate_detecter.load_weights("Models/model_weights.h5")
+
+            print("Number Plate CNN model loaded (manual reconstruction).")
+
+        except Exception as e:
+            print("Model loading failed:", e)
+            plate_detecter = None
+
+    # Load labels
     if not labels_value:
         if os.path.exists("Models/labels.txt"):
             with open("Models/labels.txt", "r") as file:
-                for line in file:
-                    labels_value.append(line.strip())
+                labels_value.extend([line.strip() for line in file])
             print(f"Loaded {len(labels_value)} plate labels.")
-
+            
 def load_yolo_helmet():
     global net
     if net is None:
@@ -185,7 +201,15 @@ def detectBike():
                 load_plate_model()
                 img = cv.resize(cv.imread(filename), (64,64))
                 im2arr = np.array(img).reshape(1,64,64,3)/255.0
-                preds = plate_detecter.predict(im2arr, verbose=0)
+                if plate_detecter is None:
+                    messagebox.showerror("Error", "Number plate model failed to load.")
+                    return
+
+                if plate_detecter is None:
+                    messagebox.showerror("Error", "Number plate model failed to load.")
+                    return
+
+                preds = plate_detecter.predict(im2arr, verbose=0) 
                 detected_plate = str(labels_value[np.argmax(preds)])
                 textarea.insert(END, f"Registration Number: {detected_plate}\n\n")
                 log_and_email_numberplate(detected_plate, alert_type="triple")
